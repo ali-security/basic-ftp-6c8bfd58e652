@@ -130,6 +130,58 @@ describe("Simple commands", function() {
         })
     })
 
+    it("rejects control characters in credentials", async () => {
+        this.server.addHandlers({
+            "dele": () => "250 File deleted"
+        })
+        const client = new Client(1000)
+        try {
+            await assert.rejects(() => client.access({
+                port: this.server.ctrlAddress.port,
+                user: "anonymous\r\nDELE important.txt",
+                password: "guest"
+            }), /Invalid command: Contains control characters\./)
+            assert.deepStrictEqual(this.server.receivedCommands.filter(cmd => cmd.includes("DELE")), [],
+                "no injected command should have been sent to the server")
+        }
+        finally {
+            client.close()
+        }
+    })
+
+    it("rejects control characters in a directory name", () => {
+        this.server.addHandlers({
+            "mkd": () => "257 Directory created",
+            "cwd": () => "250 OK",
+            "dele": () => "250 File deleted"
+        })
+        return assert.rejects(() => this.client.ensureDir("evil\r\nDELE important.txt"), /Invalid command: Contains control characters\./).then(() => {
+            assert.deepStrictEqual(this.server.receivedCommands.filter(cmd => cmd.includes("DELE")), [],
+                "no injected command should have been sent to the server")
+        })
+    })
+
+    it("rejects control characters in a path", () => {
+        this.server.addHandlers({
+            "cwd": () => "250 OK",
+            "dele": () => "250 File deleted"
+        })
+        return assert.rejects(() => this.client.cd("dir\r\nDELE important.txt"), /Invalid command: Contains control characters\./).then(() => {
+            assert.deepStrictEqual(this.server.receivedCommands.filter(cmd => cmd.includes("DELE")), [],
+                "no injected command should have been sent to the server")
+        })
+    })
+
+    it("rejects control characters in a custom command", () => {
+        this.server.addHandlers({
+            "dele": () => "250 File deleted"
+        })
+        return assert.rejects(() => this.client.send("SITE HELP\r\nDELE important.txt"), /Invalid command: Contains control characters\./).then(() => {
+            assert.deepStrictEqual(this.server.receivedCommands.filter(cmd => cmd.includes("DELE")), [],
+                "no injected command should have been sent to the server")
+        })
+    })
+
     it("can remove a file")
     it("can change directory")
     it("can get the current working directory")

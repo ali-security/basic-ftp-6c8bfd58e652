@@ -124,6 +124,35 @@ describe("FTPContext", function() {
         ftp.send("HELLO TEST");
     });
 
+    it("rejects a command containing a carriage return", function() {
+        let sent = false;
+        ftp.socket.on("didSend", () => { sent = true; });
+        assert.throws(() => ftp.send("USER anonymous\r\nDELE important.txt"), /^Error: Invalid command: Contains control characters\./);
+        assert.equal(sent, false, "nothing should have been written to the control socket");
+    });
+
+    it("rejects a command containing a line feed", function() {
+        let sent = false;
+        ftp.socket.on("didSend", () => { sent = true; });
+        assert.throws(() => ftp.send("MKD dir\nDELE important.txt"), /^Error: Invalid command: Contains control characters\./);
+        assert.equal(sent, false, "nothing should have been written to the control socket");
+    });
+
+    it("rejects a command containing a null byte", function() {
+        let sent = false;
+        ftp.socket.on("didSend", () => { sent = true; });
+        assert.throws(() => ftp.send("MKD dir\0DELE important.txt"), /^Error: Invalid command: Contains control characters\./);
+        assert.equal(sent, false, "nothing should have been written to the control socket");
+    });
+
+    it("rejects a password containing control characters", function() {
+        // This is the command a login sends after the server asked for a password.
+        let sent = false;
+        ftp.socket.on("didSend", () => { sent = true; });
+        assert.throws(() => ftp.send("PASS guest\r\nDELE important.txt"), /^Error: Invalid command: Contains control characters\./);
+        assert.equal(sent, false, "nothing should have been written to the control socket");
+    });
+
     it("is using UTF-8 by default", function(done) {
         ftp.socket.once("didSend", buf => {
             assert.equal(buf.toString(), "HELLO 直己\r\n");
