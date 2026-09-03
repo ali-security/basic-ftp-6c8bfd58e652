@@ -51,10 +51,16 @@ export interface UploadOptions {
 
 export interface ClientOptions {
     allowSeparateTransferHost: boolean
+    /**
+     * The upper bound for directory listings, a security measure to avoid unbounded memory consumption.
+     * You typically don't have to set this, the library picks a reasonable default.
+     */
+    maxListingBytes: number
 }
 
 const defaultClientOptions: ClientOptions = {
-    allowSeparateTransferHost: true
+    allowSeparateTransferHost: true,
+    maxListingBytes: 40 * 1024 * 1024
 }
 const LIST_COMMANDS_DEFAULT = () => ["LIST -a", "LIST"]
 const LIST_COMMANDS_MLSD = () => ["MLSD", "LIST -a", "LIST"]
@@ -70,18 +76,22 @@ export class Client {
     readonly ftp: FTPContext
     /** Tracks progress of data transfers. */
     protected _progressTracker: ProgressTracker
+    protected options: ClientOptions
 
     /**
      * Instantiate an FTP client.
      *
      * @param timeout  Timeout in milliseconds, use 0 for no timeout. Optional, default is 30 seconds.
+     * @param userOptions  Client options, see `ClientOptions`. Optional, the library picks reasonable defaults.
      */
-    constructor(timeout = 30000, options: ClientOptions = defaultClientOptions) {
+    constructor(timeout = 30000, userOptions: Partial<ClientOptions> = {}) {
+        const options: ClientOptions = { ...defaultClientOptions, ...userOptions }
         this.ftp = new FTPContext(timeout)
         this.prepareTransfer = this._enterFirstCompatibleMode([
-            enterPassiveModeIPv6, 
+            enterPassiveModeIPv6,
             options.allowSeparateTransferHost ? enterPassiveModeIPv4 : enterPassiveModeIPv4_forceControlHostIP
         ])
+        this.options = options
         this.parseList = parseListAutoDetect
         this._progressTracker = new ProgressTracker()
     }
@@ -589,7 +599,7 @@ export class Client {
      * @protected
      */
     protected async _requestListWithCommand(command: string): Promise<FileInfo[]> {
-        const buffer = new StringWriter()
+        const buffer = new StringWriter(this.options.maxListingBytes)
         await downloadTo(buffer, {
             ftp: this.ftp,
             tracker: this._progressTracker,
